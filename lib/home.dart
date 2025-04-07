@@ -14,167 +14,146 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> {
   String result = '';
   File? image;
-  final ImagePicker imagePicker = ImagePicker(); // Đã khởi tạo sẵn
+  final ImagePicker imagePicker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
-    requestCameraPermission(); // Yêu cầu quyền camera khi ứng dụng mở
+    requestCameraPermission();
   }
 
   Future<void> requestCameraPermission() async {
     var status = await Permission.camera.request();
-    if (status.isDenied) {
-      print("Quyền camera bị từ chối.");
-    } else if (status.isPermanentlyDenied) {
-      print("Quyền camera bị từ chối vĩnh viễn. Mở cài đặt...");
-      openAppSettings(); // Điều hướng người dùng vào cài đặt
+    if (status.isDenied || status.isPermanentlyDenied) {
+      await openAppSettings();
     }
   }
 
-
-  Future<void> pickImageFromCamera() async {
-    var status = await Permission.camera.status;
-    if (status.isGranted) {
-      XFile? pickedFile = await imagePicker.pickImage(
-          source: ImageSource.camera);
-      if (pickedFile != null) {
-        setState(() {
-          image = File(pickedFile.path);
-        });
-        performImageLabelling();
-      }
-    } else {
-      print("Không có quyền truy cập camera.");
-    }
-  }
-
-  pickImageFromGallery() async {
-    XFile? pickedFile = await imagePicker.pickImage(
-        source: ImageSource.gallery);
+  Future<void> pickImage(ImageSource source) async {
+    final pickedFile = await imagePicker.pickImage(source: source);
     if (pickedFile != null) {
       setState(() {
         image = File(pickedFile.path);
+        result = "Processing...";
       });
-      performImageLabelling();
+      await performImageLabelling();
     }
   }
 
-
-  performImageLabelling() async {
+  Future<void> performImageLabelling() async {
     if (image == null) return;
 
-    final InputImage inputImage = InputImage.fromFile(image!);
-    final TextRecognizer textRecognizer = GoogleMlKit.vision.textRecognizer();
+    final inputImage = InputImage.fromFile(image!);
+    final textRecognizer = GoogleMlKit.vision.textRecognizer();
 
-    final RecognizedText recognizedText = await textRecognizer.processImage(
-        inputImage);
+    final RecognizedText recognizedText = await textRecognizer.processImage(inputImage);
 
     String extractedText = '';
-
-    for (TextBlock block in recognizedText.blocks) {
-      for (TextLine line in block.lines) {
+    for (var block in recognizedText.blocks) {
+      for (var line in block.lines) {
         extractedText += '${line.text}\n';
       }
-      extractedText += '\n'; // Xuống dòng giữa các đoạn
+      extractedText += '\n';
     }
 
     setState(() {
-      result = extractedText;
+      result = extractedText.trim().isEmpty ? "No text detected." : extractedText;
     });
 
-    textRecognizer.close(); // Đóng trình nhận diện để tiết kiệm bộ nhớ
+    textRecognizer.close();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage('assets/back.jpg'),
-            fit: BoxFit.cover,
-          ),
-        ),
-        child: Column(
-          children: [
-            const SizedBox(width: 200),
-            Container(
-              height: 450,
-              width: 350,
-              margin: const EdgeInsets.only(top: 70),
-              padding: const EdgeInsets.only(left: 20, bottom: 5, right: 10),
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    result,
-                    style: const TextStyle(fontSize: 16),
-                    textAlign: TextAlign.justify,
-                  ),
-                ),
-              ),
-              decoration: const BoxDecoration(
-                image: DecorationImage(
-                  image: AssetImage('assets/note.jpg'),
-                  fit: BoxFit.cover,
-                ),
-              ),
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        title: const Text('Text Scanner'),
+        backgroundColor: Colors.black.withOpacity(0.6),
+        elevation: 0,
+        centerTitle: true,
+      ),
+      body: Stack(
+        children: [
+          // Background
+          Positioned.fill(
+            child: Image.asset(
+              'assets/back.jpg',
+              fit: BoxFit.cover,
+              color: Colors.black.withOpacity(0.3),
+              colorBlendMode: BlendMode.darken,
             ),
-            Container(
-              margin: const EdgeInsets.only(top: 20, right: 140),
+          ),
+          // Content
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  Stack(
-                    children: [
-                      Center(
-                        child: Image.asset(
-                          'assets/pin.png',
-                          height: 240,
-                          width: 240,
+                  // Image Preview
+                  Container(
+                    height: 200,
+                    decoration: BoxDecoration(
+                      color: Colors.black12,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white38),
+                    ),
+                    child: image != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Image.file(image!, fit: BoxFit.cover),
+                          )
+                        : const Center(
+                            child: Icon(Icons.image, size: 80, color: Colors.white38),
+                          ),
+                  ),
+                  const SizedBox(height: 20),
+                  // Result Display
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: SingleChildScrollView(
+                        child: Text(
+                          result.isNotEmpty ? result : "No image selected.",
+                          style: const TextStyle(fontSize: 16),
                         ),
                       ),
-                      Center(
-                        child: TextButton(
-                          onPressed: () {
-                            pickImageFromGallery();
-                          },
-                          onLongPress: () {
-                            pickImageFromCamera();
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.only(top: 25),
-                            child: image != null
-                                ? Image.file(
-                              image!,
-                              width: 140,
-                              height: 192,
-                              fit: BoxFit.fill,
-                            )
-                                : Container(
-                              width: 240,
-                              height: 200,
-                              child: const Icon(
-                                Icons.camera_enhance_sharp,
-                                size: 100,
-                                color: Colors.lightBlue,
-                              ),
-                            ),
-                          ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  // Buttons
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: () => pickImage(ImageSource.gallery),
+                        icon: const Icon(Icons.photo_library),
+                        label: const Text("Gallery"),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          backgroundColor: Colors.deepPurple,
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => pickImage(ImageSource.camera),
+                        icon: const Icon(Icons.camera_alt),
+                        label: const Text("Camera"),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          backgroundColor: Colors.deepOrange,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8), // Khoảng cách giữa nút và chữ
-                  const Text(
-                    "Long press to take a photo", // Chữ note nhỏ
-                    style: TextStyle(fontSize: 14, color: Colors.lightBlueAccent),
-                  ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
